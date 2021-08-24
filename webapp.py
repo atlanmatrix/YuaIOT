@@ -68,7 +68,9 @@ class HeartbeatHandler(BaseHandler):
     Get IOT device status
     """
     def get(self):
-        pass
+        with open("./hearbeat.log", "a") as fd:
+            fd.write(f"{self.request.remote_ip}\n")
+        return self.write("ok")
 
 
 class TaskDistributionHandler(BaseHandler):
