@@ -93,6 +93,7 @@ def make_app():
         (r"/destroy", DestroyHandler),
         (r"/heartbeat", HeartbeatHandler),
         (r"/task", TaskDistributionHandler),
+        (r"/get_server_ip", ServerIPHandler),
     ])
 
 
@@ -106,5 +107,5 @@ def init_sys():
 
 if __name__ == "__main__":
     app = make_app()
-    app.listen(8888)
+    app.listen(8899)
     tornado.ioloop.IOLoop.current().start()
