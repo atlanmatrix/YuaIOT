@@ -14,13 +14,7 @@ class BaseHandler(tornado.web.RequestHandler):
 
 class DeviceMonitor(BaseHandler):
     def get(self):
-        data = {}
-        with open("./server.json", "r") as fd:
-            data = json.load(fd)
-        
-        position = self.get_argument("po")
-        ip = data.get(position)
-        return self.write(ip)
+        pass
 
     def post(self):
         pass
@@ -28,7 +22,13 @@ class DeviceMonitor(BaseHandler):
 
 class ServerIPHandler(BaseHandler):
     def get(self):
-        pass
+        data = {}
+        with open("./server.json", "r") as fd:
+            data = json.load(fd)
+        
+        position = self.get_argument("po")
+        ip = data.get(position)
+        return self.write(ip)
 
     def post(self):
         pass
