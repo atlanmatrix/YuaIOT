@@ -1,0 +1,8 @@
+**/.vscode
+**/.idea
+
+**/*.pyc
+**/*.pyd
+
+**/__pycache__
+server.json
