@@ -1,8 +1,15 @@
+# IDE/Editor Configuration Directory
 **/.vscode
 **/.idea
 
+# Python cache files
 **/*.pyc
 **/*.pyd
-
 **/__pycache__
+
+# System configuration files
 server.json
+
+# System log files
+.log/*
+**/*.log
