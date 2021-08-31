@@ -1,0 +1,2 @@
+GROUP = ''
+ROLE = 'processor'
