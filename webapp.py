@@ -9,6 +9,13 @@ import tornado.ioloop
 import tornado.web
 
 
+def get_file_size(file_path):
+    if os.path.exists(file_path):
+        return os.path.getsize(file_path)
+    else:
+        return 0
+
+
 class BaseHandler(tornado.web.RequestHandler):
     def __init__(self, application: "tornado.web.Application", 
                  request: httputil.HTTPServerRequest, **kwargs: Any) -> None:
@@ -96,6 +103,42 @@ class DeviceDataHandler(BaseHandler):
     pass
 
 
+class UpdateCollectorHandler(BaseHandler):
+    """
+    Update fixture for ESP32 chip
+    """
+    def get(self):
+        # Get client version
+        client_v = self.get_argument('v')
+
+        # Primary process
+        from collector_app import VERSION as server_v
+        client_v_lst = client_v.split(".")
+        server_v_lst = server_v.split(".")
+
+        # Check if local version is newest
+        is_newest = True
+        for i in range(3):
+            if client_v_lst[i] < server_v_lst[i]:
+                is_newest = False
+                break
+
+        if is_newest:
+            return self.write({
+                "is_suc": True,
+                "data": {"is_newest": True}
+            })
+        else:
+            return self.write({
+                "is_suc": True,
+                "data": {
+                    "is_newest": False, 
+                    "ver": server_v, 
+                    "size": get_file_size("./collector_app")
+                }
+            })
+
+
 class RegistrationHandler(BaseHandler):
     """
     Registration of daily task,
@@ -164,6 +207,7 @@ def make_app():
         (r"/task", TaskDistributionHandler),
         (r"/get_server_ip", ServerIPHandler),
         (r"/registration", RegistrationHandler),
+        (r"/check_for_update", UpdateCollectorHandler),
     ])
 
 
