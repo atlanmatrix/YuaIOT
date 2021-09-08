@@ -153,6 +153,7 @@ class FirmwareHandler(BaseHandler):
         # Map of comps and files
         firmware_comps = {
             'main': 'main.py',
+            'core': 'core.py',
             'fm': 'firmware_manager.py',
             'inspector': 'inspector.py',
             'middle': 'middle_man.py'
