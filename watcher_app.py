@@ -1,6 +1,7 @@
 import os
 import json
 import datetime
+import logging
 from time import time
 from collections import defaultdict
 
@@ -8,6 +9,8 @@ from typing import Any
 from tornado import httputil
 import tornado.ioloop
 import tornado.web
+
+from utils import get_file_size
 
 
 class BaseHandler(tornado.web.RequestHandler):
@@ -107,11 +110,72 @@ class HeartbeatHandler(BaseHandler):
         return self.write("ok")
 
 
+class UpdateCollectorHandler(BaseHandler):
+    """
+    Update fixture for ESP32 chip
+    """
+    def get(self):
+        # Get client version
+        client_v = self.get_argument('v')
+
+        # Primary process
+        from collector_app import App
+        app = App()
+        server_v = app.version()
+        client_v_lst = client_v.split(".")
+        server_v_lst = server_v.split(".")
+
+        # Check if local version is newest
+        is_newest = True
+        for i in range(3):
+            if client_v_lst[i] < server_v_lst[i]:
+                is_newest = False
+                break
+
+        if is_newest:
+            return self.write({
+                "is_suc": True,
+                "data": {"is_newest": True}
+            })
+        else:
+            return self.write({
+                "is_suc": True,
+                "data": {
+                    "is_newest": False, 
+                    "ver": server_v, 
+                    "size": get_file_size("./collector_app")
+                }
+            })
+
+
+class FirmwareHandler(BaseHandler):
+    def get(self, comp):
+        # Map of comps and files
+        firmware_comps = {
+            'main': 'main.py',
+            'fm': 'firmware_manager.py',
+            'inspector': 'inspector.py',
+            'middle': 'middle_man.py'
+        }
+
+        file_path = firmware_comps.get(comp) or 'main.py'
+        if file_path and os.path.exists(file_path):
+            with open(file_path, 'r') as fd:
+                content = fd.read()
+            return self.write({'is_suc': True, 'data': {
+                'content': content,
+                'path': file_path
+            }})
+        return self.write({'is_suc': False, 'msg': ''})
+
+
 def make_app():
     return tornado.web.Application([
         (r"/register", DeviceRegisterHandler),
         (r"/devices", DeviceDataHandler),
         (r"/destroy", DeviceDestroyHandler),
+        (r"/check_for_update", UpdateCollectorHandler),
+        (r"/update/(.*)", FirmwareHandler),
     ])
 
 
@@ -125,5 +189,8 @@ def init_sys():
 
 if __name__ == "__main__":
     app = make_app()
-    app.listen(8899)
+    port = 8899
+    app.listen(port)
+    print('Listening on ' + str(port))
+    logging.info('Listening on ' + str(port))
     tornado.ioloop.IOLoop.current().start()
