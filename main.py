@@ -11,6 +11,7 @@ import machine
 from time import sleep
 from network import STAT_CONNECTING, STAT_NO_AP_FOUND, STAT_WRONG_PASSWORD
 from network import STAT_HANDSHAKE_TIMEOUT
+import collector_app
 
 
 ROLE = 2
@@ -109,3 +110,4 @@ def install():
 
 
 install()
+collector_app.App()
