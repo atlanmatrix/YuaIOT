@@ -13,3 +13,6 @@ server.json
 # System log files
 .log/*
 **/*.log
+
+# Configuration file
+coll_config.json

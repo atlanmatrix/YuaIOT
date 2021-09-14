@@ -1,6 +1,7 @@
 import os
 import json
 import datetime
+import logging
 from time import time
 from collections import defaultdict
 
@@ -10,8 +11,17 @@ import tornado.ioloop
 import tornado.web
 
 
+FM_COMPS = {
+    'core': 'core.py',
+    'fm': 'firmware_manager.py',
+    'alias': 'alias.py',
+    'utils': 'utils.py',
+    'coll_init': 'coll_init.py',
+}
+
+
 class BaseHandler(tornado.web.RequestHandler):
-    def __init__(self, application: "tornado.web.Application", 
+    def __init__(self, application: "tornado.web.Application",
                  request: httputil.HTTPServerRequest, **kwargs: Any) -> None:
         super().__init__(application, request, **kwargs)
 
@@ -20,6 +30,7 @@ class DeviceRegisterHandler(BaseHandler):
     """
     Register device
     """
+
     def get(self):
         # Register status query
         pass
@@ -33,6 +44,7 @@ class DeviceDestroyHandler(BaseHandler):
     """
     Destroy device
     """
+
     def get(self):
         pass
 
@@ -45,24 +57,25 @@ class DeviceDataHandler(BaseHandler):
     Get registered device infos,
     such as Watchers' ips etc.
     """
+
     def get(self):
         # role = self.get_argument("role")
         # if role is None:
         #     return self.write({"is_suc": False, "error": "Invalid Role"})
 
         now = int(time.time())
-        # TODO 
+        # TODO
         # switch to influxDB and MongoDB here.
         DEVICES_INFO_FILE = r"./devices.json"
 
         # No device has registered
         if not os.path.exists(DEVICES_INFO_FILE):
             return self.write({"is_suc": True, "data": {}})
-        
+
         with open(DEVICES_INFO_FILE, "r") as fd:
             # [{}, {}, {}]
             devices = json.load(fd)
-        
+
         # Get online devices
         # if check_time before 5s, this device maybe offline
         online_devices = defaultdict(list)
@@ -73,7 +86,6 @@ class DeviceDataHandler(BaseHandler):
 
         return online_devices
 
-
     def post(self):
         pass
 
@@ -83,7 +95,7 @@ class ServerIPHandler(BaseHandler):
         data = {}
         with open("./server.json", "r") as fd:
             data = json.load(fd)
-        
+
         position = self.get_argument("po")
         ip = data.get(position)
         return self.write(ip)
@@ -96,6 +108,7 @@ class HeartbeatHandler(BaseHandler):
     """
     Get IOT device status
     """
+
     def get(self):
         device_sn = self.get_argument("sn")
         with open("./hearbeat.log", "a") as fd:
@@ -107,11 +120,77 @@ class HeartbeatHandler(BaseHandler):
         return self.write("ok")
 
 
+class UpdateCollectorHandler(BaseHandler):
+    """
+    Update fixture for ESP32 chip
+    """
+
+    def get(self):
+        # Get client version
+        client_v = self.get_argument('v')
+
+        # Primary process
+        from collector_app import App
+        app = App()
+        server_v = app.version()
+        client_v_lst = client_v.split(".")
+        server_v_lst = server_v.split(".")
+
+        # Check if local version is newest
+        is_newest = True
+        for i in range(3):
+            if client_v_lst[i] < server_v_lst[i]:
+                is_newest = False
+                break
+
+        if is_newest:
+            return self.write({
+                "is_suc": True,
+                "data": {"is_newest": True}
+            })
+        else:
+            file_path = "./collector_app"
+            file_size = -1
+            if os.path.exists(file_path):
+                file_size = os.path.getsize(file_path)
+
+            return self.write({
+                "is_suc": True,
+                "data": {
+                    "is_newest": False,
+                    "ver": server_v,
+                    "size": file_size
+                }
+            })
+
+
+class FirmwareHandler(BaseHandler):
+    def get(self, comp):
+        # Map of comps and files
+        file_path = FM_COMPS.get(comp) or 'core.py'
+        if file_path and os.path.exists(file_path):
+            with open(file_path, 'r') as fd:
+                content = fd.read()
+            return self.write({'is_suc': True, 'data': {
+                'content': content,
+                'path': file_path
+            }})
+        return self.write({'is_suc': False, 'msg': ''})
+
+
+class UpdateListHandler(BaseHandler):
+    def get(self):
+        return self.write({'is_suc': True, 'data': list(FM_COMPS)})
+
+
 def make_app():
     return tornado.web.Application([
         (r"/register", DeviceRegisterHandler),
         (r"/devices", DeviceDataHandler),
         (r"/destroy", DeviceDestroyHandler),
+        (r"/check_for_update", UpdateCollectorHandler),
+        (r"/update/(.*)", FirmwareHandler),
+        (r"/get_update_list", UpdateListHandler),
     ])
 
 
@@ -125,5 +204,8 @@ def init_sys():
 
 if __name__ == "__main__":
     app = make_app()
-    app.listen(8899)
+    port = 8899
+    app.listen(port)
+    print('Listening on ' + str(port))
+    logging.info('Listening on ' + str(port))
     tornado.ioloop.IOLoop.current().start()
