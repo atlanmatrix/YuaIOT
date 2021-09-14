@@ -1,7 +1,8 @@
 import os
-import socket
+import usocket as socket
 import network
 import urequests
+import ure as re
 
 
 class App:
@@ -26,42 +27,44 @@ class App:
         # Init configurations
         self._init_config()
         # Get system status
-        self._get_sys_status()
+        # self._get_sys_status()
         # Create access point
         self._create_ap()
         # Provide web service
         self._run_web_server()
 
-    def _random_hex_str(self, len):
+    def _random_hex_str(self, len=4):
         hex_str = ''.join(
-            [('0'+hex(ord(os.urandom(1)))[2:])[-2:] for _ in range(len // 2)])
+            [('0' + hex(ord(os.urandom(1)))[2:])[-2:] for _ in range(len // 2)])
         return hex_str
 
     def _random_essid(self):
-        return 'ESP32_' + self._random_hex_str()
-        
+        return 'ESP32_' + self._random_hex_str(4)
+
     def _init_config(self):
         # If config file not found, create one from default(TODO)
         # Else read config(TODO)
-        if not os.path.exists('coll_config.py'):
-            if 'ap' not in self._config:
-                self._config['ap'] = {'essid': self._random_essid()}
-            if 'server' not in self._config:
-                self._config['server'] = 'iot.yua.im'
+        if not 'coll_config.py' in os.listdir():
+            # if not os.path.exists('coll_config.py'):
+            # if 'ap' not in self._config:
+            self._config['ap'] = {'essid': self._random_essid()}
+            # if 'server' not in self._config:
+            self._config['server'] = 'iot.yua.im'
         else:
             pass
+        print("_init_config:%s" % str(self._config))
 
     def _get_sys_status(self):
         status = {}
         # Get flash status
         statvfs_fields = ['bsize', 'frsize', 'blocks',
-                      'bfree', 'bavail', 'files', 'ffree', ]
+                          'bfree', 'bavail', 'files', 'ffree', ]
         flash_status = dict(zip(statvfs_fields, os.statvfs('/')))
         # TODO: Get memory status
         pass
         # TODO: Get connection status
         ap_status = self._ap.ifconfig()
-        sta_status = self._sta.config()
+        sta_status = self._sta.ifconfig()
 
         status.update(flash_status)
         return status
@@ -69,10 +72,12 @@ class App:
     def _create_ap(self):
         # Create access point for connection
         try:
-            ap_config = self._config.ap
+            ap_config = self._config['ap']
             self._ap.config(essid=ap_config['essid'])
             self._ap.active(True)
-        except:
+            print("set ap " + ap_config['essid'])
+        except Exception as e:
+            print('_create_ap:%s' % e)
             pass
 
     def _default_handler(self):
@@ -81,18 +86,49 @@ class App:
     def _request_handler(self, method, path):
         # Only HTTP 'get' method supported now
         # TODO
-        if method == 'get':
-            if path == '/':
+        if method.find('GET') >= 0:
+            if path.find('/get_wifi_html') >= 0:
                 self._default_handler()
+                html = """
+                <form>
+                    ssid:<input type="text" id="ssid" >
+                    <br>
+                    password:<input type="text" id="password" >
+                    <br><br>
+                    <input type="submit" value="submit" onclick="submitInfo()">
+                </form> 
+                <script>
+                    function submitInfo(){
+                        var ssid = document.getElementById("ssid").value;
+                        var password = document.getElementById("password").value;
+                        window.location.href = 'set_wifi?ssid='+ssid+'&password='+password;
+                    }
+                </script>
+                """
+                return self._html.replace('$$', html)
+            elif path.find('/set_wifi') >= 0:
+                """
+                path = '/set_wifi?ssid=qvb&password=1234'
+                ['/set_wifi', 'ssid', 'qvb', 'password', '1234']
+                """
+                data = re.compile(r'[?&=]').split(path)
+                self._default_handler()
+                self._config['wifi'] = {
+                    'ssid': data[2],
+                    'passwd': data[4]
+                }
+                self._set_sta()
+                return self._html.replace('$$', '<h1>success!</h1>')
             else:
-                self._default_handler()
+                # self._default_handler()
+                return None
         else:
-            self._default_handler()
+            # self._default_handler()
+            return None
 
     def _run_web_server(self):
-        addr = socket.getaddrinfo('192.168.4.1', 80)[0][-1]
-        server = socket.socket()
-        server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        addr = socket.getaddrinfo('0.0.0.0', 80)[0][-1]
+        server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server.bind(addr)
         server.listen(5)
         print('listening on', addr)
@@ -100,23 +136,19 @@ class App:
         while True:
             cl, addr = server.accept()
             print('client connected from', addr)
-            cl_file = cl.makefile('rwb', 0)
-            line_no = 0
-            method = None
-            path = None
-            while True:
-                line = cl_file.readline()
-                if line_no == 0:
-                    method = line.split(b' ')[0]
-                    path = line.split(b' ')[1]
-                if not line or line == b'\r\n':
-                    break
-                line_no += 1
-            self._request_handler(method, path)
+            try:
+                data = cl.recv(1024)
+                method = data.split(b' ')[0].decode("utf-8")
+                path = data.split(b' ')[1].decode("utf-8")
 
-            response = self._html.replace('$$', '<h1>Hello world!</h1>')
-            cl.send('HTTP/1.0 200 OK\r\nContent-type: text/html\r\n\r\n')
-            cl.send(response)
+                print(method, path)
+                response = self._request_handler(method, path)
+                if response:
+                    cl.send(b'HTTP/1.0 200 OK\r\nContent-type: text/html\r\n\r\n')
+                    cl.send(bytes(response.encode('utf-8')))
+                    cl.settimeout(10)
+            except Exception as e:
+                print('_run_web_server:%s' % e)
             cl.close()
 
     def _get_ap_lst(self):
@@ -127,12 +159,14 @@ class App:
         try:
             self._sta.active(True)
             wifi_conf = self._config['wifi']
-
+            print("config:", self._config)
             count = 0
             while not self._sta.isconnected() and count < 3:
                 self._sta.connect(wifi_conf['ssid'], wifi_conf['passwd'])
                 count += 1
-        except:
+            print('network config:', self._sta.ifconfig())
+        except Exception as e:
+            print('_set_sta:%s' % e)
             pass
 
     def _update_firmware(self):
@@ -141,6 +175,7 @@ class App:
             res = urequests.get(self._server + '/check_for_update?v=' + self._version)
             # TODO: result handler here
             pass
+
 
 if __name__ == "__main__":
     app = App()
