@@ -170,7 +170,7 @@ class App:
             pass
 
     def _update_firmware(self):
-        # Update firmware from cloud server
+        # Update firmware from cloud server  
         if self._sta is not None and self._server is not None:
             res = urequests.get(self._server + '/check_for_update?v=' + self._version)
             # TODO: result handler here
