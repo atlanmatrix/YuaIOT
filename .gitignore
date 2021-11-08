@@ -16,3 +16,9 @@ server.json
 
 # Configuration file
 coll_config.json
+
+# 编译后二进制 py 文件
+*.mpy
+
+# 
+.python-version
